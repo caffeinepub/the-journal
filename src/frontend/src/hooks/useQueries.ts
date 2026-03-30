@@ -131,8 +131,9 @@ export function useUpdatePost() {
       if (!actor) throw new Error("No actor");
       return actor.updatePost(id, post);
     },
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["post", id.toString()] });
     },
   });
 }

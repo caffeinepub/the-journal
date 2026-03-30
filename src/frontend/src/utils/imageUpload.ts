@@ -8,7 +8,7 @@ export async function uploadImageFile(
   identity?: Identity,
 ): Promise<string> {
   const config = await loadConfig();
-  const agent = new HttpAgent({ host: config.backend_host, identity });
+  const agent = HttpAgent.createSync({ host: config.backend_host, identity });
   if (config.backend_host?.includes("localhost")) {
     await agent.fetchRootKey().catch(() => {});
   }

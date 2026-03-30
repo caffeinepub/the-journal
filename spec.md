@@ -1,27 +1,29 @@
 # The Journal
 
 ## Current State
-The app has a `ProfileSetupDialog` that opens after login when the user has no name set. The `WritePostPage` already gates writing behind authentication (shows a sign-in prompt if `!identity`). There is no first-visit welcome popup.
+- Multi-author blog with blob-storage for image uploads
+- `imageUpload.ts` creates its own `HttpAgent` using `new HttpAgent(...)` constructor
+- `backend.ts` creates agents using `HttpAgent.createSync(...)` which properly enables IC v3 call protocol
+- `backend.d.ts` is outdated — `UserProfile` is missing `about` and `profilePicUrl` optional fields
+- WritePostPage and EditPostPage catch upload errors silently (no actual error message shown)
+- Profile save uses `as any` cast with manual Candid format for optional fields
 
 ## Requested Changes (Diff)
 
 ### Add
-- A `WelcomePopup` component that shows **once** on first site visit (tracked via localStorage key `journal_welcomed`)
-- The popup has rephrased inspirational text (rephrase: "The best place to craft your creativity — sign up or enter your pen name to begin")
-- An input field for the user's pen name (stored to localStorage as `journal_pending_penname`)
-- A "Sign Up / Sign In" button that triggers `login()` from `useInternetIdentity`
-- A "Maybe Later" dismiss option
-- After login, if a pending pen name exists in localStorage, pre-populate it in `ProfileSetupDialog` and clear localStorage
+- Show actual error messages on upload failures in WritePostPage and EditPostPage
 
 ### Modify
-- `ProfileSetupDialog`: on mount, check localStorage for `journal_pending_penname` and pre-fill the name input with it, then clear it
-- `App.tsx`: render `<WelcomePopup />` in the root layout
-- Writing is already gated behind auth in `WritePostPage` — no change needed there
+- `imageUpload.ts`: Change `new HttpAgent(...)` to `HttpAgent.createSync(...)` — this enables the IC v3 sync response protocol which is required for the `getCertificate` call to work (the certificate is in the v3 response body)
+- `backend.d.ts`: Add `about?: string` and `profilePicUrl?: string` to `UserProfile` to match `backend.ts` definition
+- `useQueries.ts`: Simplify `useSaveProfile` — pass the profile fields directly matching the `UserProfile` type from `backend.ts` (which already has `about?: Array<string>` and `profilePicUrl?: Array<string>`)
 
 ### Remove
 - Nothing
 
 ## Implementation Plan
-1. Create `src/frontend/src/components/WelcomePopup.tsx` — shows once per visitor, has rephrased tagline, pen name input, sign-in CTA, and dismiss
-2. Update `ProfileSetupDialog.tsx` to read `journal_pending_penname` from localStorage and pre-fill name
-3. Update `App.tsx` to include `<WelcomePopup />`
+1. Fix `imageUpload.ts`: replace `new HttpAgent({ host: config.backend_host, identity })` with `HttpAgent.createSync({ host: config.backend_host, identity })`
+2. Fix `backend.d.ts`: add `about?: string` and `profilePicUrl?: string` to UserProfile (to match the actual backend.ts type)
+3. Fix `WritePostPage.tsx` and `EditPostPage.tsx`: in catch blocks show the actual error message instead of generic string
+4. Fix `EditProfilePage.tsx`: ensure error handling shows full error detail
+5. Validate and build

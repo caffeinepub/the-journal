@@ -11,7 +11,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { ArrowLeft, ImagePlus, Loader2, X } from "lucide-react";
+import { ArrowLeft, ImagePlus, Link2, Loader2, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -32,6 +32,7 @@ export default function EditPostPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const bodyFileInputRef = useRef<HTMLInputElement>(null);
   const bodyTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const linkCursorRef = useRef<number | null>(null);
 
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -39,6 +40,9 @@ export default function EditPostPage() {
   const [coverImageUrl, setCoverImageUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadingBody, setUploadingBody] = useState(false);
+  const [showLinkForm, setShowLinkForm] = useState(false);
+  const [linkText, setLinkText] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
 
   useEffect(() => {
     if (post) {
@@ -57,8 +61,9 @@ export default function EditPostPage() {
       const url = await uploadImageFile(file, identity ?? undefined);
       setCoverImageUrl(url);
       toast.success("Image uploaded!");
-    } catch {
-      toast.error("Failed to upload image");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error(`Failed to upload image: ${msg}`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -70,21 +75,53 @@ export default function EditPostPage() {
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const cursor = bodyTextareaRef.current?.selectionStart ?? -1;
     setUploadingBody(true);
     try {
       const url = await uploadImageFile(file, identity ?? undefined);
-      const textarea = bodyTextareaRef.current;
-      const cursor = textarea?.selectionStart ?? body.length;
       const tag = `[image:${url}]`;
-      const newBody = body.slice(0, cursor) + tag + body.slice(cursor);
-      setBody(newBody);
+      setBody((prev) => {
+        const pos = cursor === -1 ? prev.length : cursor;
+        return prev.slice(0, pos) + tag + prev.slice(pos);
+      });
       toast.success("Image inserted!");
-    } catch {
-      toast.error("Failed to upload image");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error(`Failed to upload image: ${msg}`);
     } finally {
       setUploadingBody(false);
       if (bodyFileInputRef.current) bodyFileInputRef.current.value = "";
     }
+  };
+
+  const applyFormat = (marker: string) => {
+    const textarea = bodyTextareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = body.slice(start, end);
+    const wrapped = selected
+      ? `${marker}${selected}${marker}`
+      : `${marker}text${marker}`;
+    setBody((prev) => prev.slice(0, start) + wrapped + prev.slice(end));
+  };
+
+  const handleInsertLink = () => {
+    linkCursorRef.current = bodyTextareaRef.current?.selectionStart ?? null;
+    setShowLinkForm(true);
+  };
+
+  const handleLinkSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkUrl.trim()) return;
+    const tag = `[link:${linkText || linkUrl}|${linkUrl}]`;
+    setBody((prev) => {
+      const pos = linkCursorRef.current ?? prev.length;
+      return prev.slice(0, pos) + tag + prev.slice(pos);
+    });
+    setShowLinkForm(false);
+    setLinkText("");
+    setLinkUrl("");
   };
 
   if (isLoading) {
@@ -262,8 +299,31 @@ export default function EditPostPage() {
             required
             data-ocid="edit.body.textarea"
           />
-          {/* Inline image insertion */}
-          <div className="mt-2">
+          {/* Formatting toolbar */}
+          <div className="mt-2 flex flex-wrap items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => applyFormat("**")}
+              className="font-bold text-muted-foreground hover:text-foreground px-2.5"
+              title="Bold"
+              data-ocid="edit.bold.button"
+            >
+              B
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => applyFormat("*")}
+              className="italic text-muted-foreground hover:text-foreground px-2.5"
+              title="Italic"
+              data-ocid="edit.italic.button"
+            >
+              I
+            </Button>
+            <div className="w-px h-4 bg-border mx-1" />
             <input
               ref={bodyFileInputRef}
               type="file"
@@ -285,9 +345,69 @@ export default function EditPostPage() {
               ) : (
                 <ImagePlus className="h-4 w-4" />
               )}
-              {uploadingBody ? "Uploading..." : "Insert Image into Content"}
+              {uploadingBody ? "Uploading..." : "Insert Image"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleInsertLink}
+              className="gap-2 text-muted-foreground hover:text-foreground"
+              data-ocid="edit.insert_link.button"
+            >
+              <Link2 className="h-4 w-4" />
+              Insert Link
             </Button>
           </div>
+          {showLinkForm && (
+            <form
+              onSubmit={handleLinkSubmit}
+              className="mt-3 p-3 border border-border rounded-lg bg-muted/30 space-y-2"
+              data-ocid="edit.link.panel"
+            >
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  placeholder="Link text (optional)"
+                  value={linkText}
+                  onChange={(e) => setLinkText(e.target.value)}
+                  className="flex-1 min-w-[140px] h-8 text-sm"
+                  data-ocid="edit.link_text.input"
+                />
+                <Input
+                  placeholder="https://..."
+                  value={linkUrl}
+                  onChange={(e) => setLinkUrl(e.target.value)}
+                  className="flex-1 min-w-[180px] h-8 text-sm"
+                  required
+                  data-ocid="edit.link_url.input"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="h-7 text-xs"
+                  data-ocid="edit.link.submit_button"
+                >
+                  Insert
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    setShowLinkForm(false);
+                    setLinkText("");
+                    setLinkUrl("");
+                  }}
+                  data-ocid="edit.link.cancel_button"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
         </div>
 
         <div className="flex items-center gap-3">

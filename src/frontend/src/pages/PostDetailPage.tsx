@@ -26,12 +26,36 @@ import {
   formatDate,
 } from "../utils/category";
 
+function renderInlineFormatting(text: string, key: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+  return (
+    <span
+      key={key}
+      className="whitespace-pre-wrap text-foreground leading-relaxed block"
+    >
+      {parts.map((p, i) => {
+        if (p.startsWith("**") && p.endsWith("**")) {
+          // biome-ignore lint/suspicious/noArrayIndexKey: inline formatting split
+          return <strong key={i}>{p.slice(2, -2)}</strong>;
+        }
+        if (p.startsWith("*") && p.endsWith("*")) {
+          // biome-ignore lint/suspicious/noArrayIndexKey: inline formatting split
+          return <em key={i}>{p.slice(1, -1)}</em>;
+        }
+        // biome-ignore lint/suspicious/noArrayIndexKey: inline formatting split
+        return <span key={i}>{p}</span>;
+      })}
+    </span>
+  );
+}
+
 function renderBodyWithImages(body: string) {
-  const parts = body.split(/(\[image:[^\]]+\])/g);
+  const parts = body.split(/(\[image:[^\]]+\]|\[link:[^\]]+\])/g);
   const nodes: React.ReactNode[] = [];
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
     const imageMatch = part.match(/^\[image:([^\]]+)\]$/);
+    const linkMatch = part.match(/^\[link:([^|]+)\|([^\]]+)\]$/);
     if (imageMatch) {
       nodes.push(
         <img
@@ -42,15 +66,20 @@ function renderBodyWithImages(body: string) {
           className="w-full rounded-lg my-4 object-cover max-h-96"
         />,
       );
-    } else if (part) {
+    } else if (linkMatch) {
       nodes.push(
-        <span
-          key={`text-${i}`}
-          className="whitespace-pre-wrap text-foreground leading-relaxed block"
+        <a
+          key={`link-${i}`}
+          href={linkMatch[2]}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline underline-offset-2 hover:opacity-80"
         >
-          {part}
-        </span>,
+          {linkMatch[1]}
+        </a>,
       );
+    } else if (part) {
+      nodes.push(renderInlineFormatting(part, `text-${i}`));
     }
   }
   return (
@@ -157,9 +186,7 @@ export default function PostDetailPage() {
     );
   }
 
-  const isAuthor =
-    identity && post.authorId.toString() === identity.getPrincipal().toString();
-  const canEdit = isAdmin || !!isAuthor;
+  const canEdit = !!identity;
 
   return (
     <motion.div
@@ -205,19 +232,17 @@ export default function PostDetailPage() {
                 Edit Post
               </Button>
             </Link>
-            {isAdmin && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleDeletePost}
-                disabled={deletePost.isPending}
-                className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
-                data-ocid="post.delete_button"
-              >
-                <Trash2 className="h-3.5 w-3.5 mr-1" />
-                {deletePost.isPending ? "Deleting..." : "Delete"}
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDeletePost}
+              disabled={deletePost.isPending}
+              className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+              data-ocid="post.delete_button"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1" />
+              {deletePost.isPending ? "Deleting..." : "Delete"}
+            </Button>
           </div>
         )}
       </div>
@@ -297,7 +322,7 @@ export default function PostDetailPage() {
                       </span>
                     </div>
                   </div>
-                  {isAdmin && (
+                  {(isAdmin || !!identity) && (
                     <button
                       type="button"
                       onClick={() => handleDeleteComment(comment.id)}

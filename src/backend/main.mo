@@ -135,10 +135,8 @@ actor {
     switch (postsV2.get(postId)) {
       case (null) { Runtime.trap("Post not found") };
       case (?existingPost) {
-        let isAdmin = AccessControl.isAdmin(accessControlState, caller);
-        let isAuthor = Principal.equal(existingPost.authorId, caller);
-        if (not isAdmin and not isAuthor) {
-          Runtime.trap("Unauthorized: Only the post author or admin can edit posts");
+        if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+          Runtime.trap("Unauthorized: Must be logged in to edit posts");
         };
         let category = if (post.category == #other) { existingPost.category } else { post.category };
         postsV2.add(postId, { post with category });
@@ -147,8 +145,8 @@ actor {
   };
 
   public shared ({ caller }) func deletePost(postId : Nat) : async () {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can delete posts");
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Must be logged in to delete posts");
     };
     postsV2.remove(postId);
   };
