@@ -150,7 +150,7 @@ export default function EditPostPage() {
 
   const isAuthor =
     identity && post.authorId.toString() === identity.getPrincipal().toString();
-  if (!isAdmin && !isAuthor) {
+  if (isAdmin === false && !isAuthor) {
     return (
       <div className="text-center py-20 text-muted-foreground">
         You don't have permission to edit this post.
@@ -173,8 +173,9 @@ export default function EditPostPage() {
       });
       toast.success("Post updated!");
       navigate({ to: "/post/$id", params: { id } });
-    } catch {
-      toast.error("Failed to update post");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error(`Failed to update post: ${msg}`);
     }
   };
 

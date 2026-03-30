@@ -144,8 +144,9 @@ export default function WritePostPage() {
       });
       toast.success("Post published!");
       navigate({ to: "/" });
-    } catch {
-      toast.error("Failed to publish post");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      toast.error(`Failed to publish post: ${msg}`);
     }
   };
 

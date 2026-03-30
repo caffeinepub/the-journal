@@ -1,16 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BlogPost, Category, Comment, UserProfile } from "../backend";
+import { createActorWithConfig } from "../config";
 import { useActor } from "./useActor";
 
 export function useAllPosts() {
-  const { actor, isFetching } = useActor();
+  const { actor } = useActor();
   return useQuery<BlogPost[]>({
     queryKey: ["posts"],
     queryFn: async () => {
-      if (!actor) return [];
-      return actor.getAllPosts();
+      // Use the authenticated actor if available, otherwise create an anonymous one
+      const a = actor || (await createActorWithConfig());
+      return a.getAllPosts();
     },
-    enabled: !!actor && !isFetching,
+    // Always enabled — posts are public and should load for everyone
+    enabled: true,
+    refetchOnMount: true,
   });
 }
 
