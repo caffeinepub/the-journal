@@ -1,10 +1,14 @@
+import type { Identity } from "@icp-sdk/core/agent";
 import { HttpAgent } from "@icp-sdk/core/agent";
 import { loadConfig } from "../config";
 import { StorageClient } from "./StorageClient";
 
-export async function uploadImageFile(file: File): Promise<string> {
+export async function uploadImageFile(
+  file: File,
+  identity?: Identity,
+): Promise<string> {
   const config = await loadConfig();
-  const agent = new HttpAgent({ host: config.backend_host });
+  const agent = new HttpAgent({ host: config.backend_host, identity });
   if (config.backend_host?.includes("localhost")) {
     await agent.fetchRootKey().catch(() => {});
   }

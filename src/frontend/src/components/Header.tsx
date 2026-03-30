@@ -1,4 +1,4 @@
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   PenLine,
+  UserCircle,
   X,
 } from "lucide-react";
 import { useState } from "react";
@@ -36,6 +37,7 @@ export default function Header() {
     : "";
   const displayName = profile?.name || principalShort || "";
   const initials = profile?.name ? profile.name.slice(0, 2).toUpperCase() : "U";
+  const avatarUrl = profile?.profilePicUrl?.[0] ?? "";
 
   const categories = Object.values(Category);
 
@@ -126,6 +128,9 @@ export default function Header() {
                     className="flex items-center gap-2 text-sm font-medium hover:opacity-80 transition-opacity"
                   >
                     <Avatar className="h-8 w-8">
+                      {avatarUrl && (
+                        <AvatarImage src={avatarUrl} alt={displayName} />
+                      )}
                       <AvatarFallback className="text-xs bg-primary text-primary-foreground">
                         {initials}
                       </AvatarFallback>
@@ -142,6 +147,15 @@ export default function Header() {
                       </Link>
                     </DropdownMenuItem>
                   )}
+                  <DropdownMenuItem asChild>
+                    <Link
+                      to="/profile/edit"
+                      data-ocid="header.edit_profile.link"
+                    >
+                      <UserCircle className="mr-2 h-4 w-4" />
+                      Edit Profile
+                    </Link>
+                  </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={clear}
@@ -228,8 +242,25 @@ export default function Header() {
                 >
                   <PenLine className="h-4 w-4" /> Write a Post
                 </Link>
+                <Link
+                  to="/profile/edit"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-2 text-sm font-medium text-foreground hover:text-foreground/80 transition-colors"
+                >
+                  <UserCircle className="h-4 w-4" /> Edit Profile
+                </Link>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{displayName}</span>
+                  <div className="flex items-center gap-2">
+                    <Avatar className="h-7 w-7">
+                      {avatarUrl && (
+                        <AvatarImage src={avatarUrl} alt={displayName} />
+                      )}
+                      <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                        {initials}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">{displayName}</span>
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"

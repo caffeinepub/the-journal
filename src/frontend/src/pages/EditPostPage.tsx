@@ -54,7 +54,7 @@ export default function EditPostPage() {
     if (!file) return;
     setUploading(true);
     try {
-      const url = await uploadImageFile(file);
+      const url = await uploadImageFile(file, identity ?? undefined);
       setCoverImageUrl(url);
       toast.success("Image uploaded!");
     } catch {
@@ -72,7 +72,7 @@ export default function EditPostPage() {
     if (!file) return;
     setUploadingBody(true);
     try {
-      const url = await uploadImageFile(file);
+      const url = await uploadImageFile(file, identity ?? undefined);
       const textarea = bodyTextareaRef.current;
       const cursor = textarea?.selectionStart ?? body.length;
       const tag = `[image:${url}]`;

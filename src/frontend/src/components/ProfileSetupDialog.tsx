@@ -34,7 +34,11 @@ export default function ProfileSetupDialog() {
 
   const handleSave = async () => {
     if (!name.trim()) return;
-    await saveProfile.mutateAsync({ name: name.trim() });
+    await saveProfile.mutateAsync({
+      name: name.trim(),
+      about: "",
+      profilePicUrl: "",
+    });
     setOpen(false);
   };
 

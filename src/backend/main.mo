@@ -13,67 +13,37 @@ import List "mo:core/List";
 import Order "mo:core/Order";
 import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
+import MixinBlobStorage "blob-storage/Mixin";
 
 actor {
-  // Permissions
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
+  include MixinBlobStorage();
 
-  // V1 types kept for stable variable migration compatibility
   type CategoryV1 = {
-    #health;
-    #anime;
-    #lifestyle;
-    #travel;
-    #recipes;
-    #tech;
-    #other;
+    #health; #anime; #lifestyle; #travel; #recipes; #tech; #other;
   };
 
   type BlogPostV1 = {
-    id : Nat;
-    title : Text;
-    body : Text;
-    category : CategoryV1;
-    authorId : Principal;
-    authorName : Text;
-    createdAt : Int;
-    coverImageUrl : ?Text;
-    likeCount : Nat;
-    likes : [Principal];
+    id : Nat; title : Text; body : Text; category : CategoryV1;
+    authorId : Principal; authorName : Text; createdAt : Int;
+    coverImageUrl : ?Text; likeCount : Nat; likes : [Principal];
   };
 
-  // Current types
   type Category = {
-    #health;
-    #anime;
-    #lifestyle;
-    #travel;
-    #recipes;
-    #tech;
-    #other;
-    #poetries;
+    #health; #anime; #lifestyle; #travel; #recipes; #tech; #other; #poetries;
   };
 
   public type BlogPost = {
-    id : Nat;
-    title : Text;
-    body : Text;
-    category : Category;
-    authorId : Principal;
-    authorName : Text;
-    createdAt : Int;
-    coverImageUrl : ?Text;
-    likeCount : Nat;
-    likes : [Principal];
+    id : Nat; title : Text; body : Text; category : Category;
+    authorId : Principal; authorName : Text; createdAt : Int;
+    coverImageUrl : ?Text; likeCount : Nat; likes : [Principal];
   };
 
   module BlogPost {
     public func computeLikeCount(likes : [Principal]) : Nat {
       switch (Nat.compare(likes.size(), 1)) {
-        case (#less) { 0 };
-        case (#equal) { 1 };
-        case (#greater) { likes.size() };
+        case (#less) { 0 }; case (#equal) { 1 }; case (#greater) { likes.size() };
       };
     };
     public func compareByLikes(post1 : BlogPost, post2 : BlogPost) : Order.Order {
@@ -82,118 +52,96 @@ actor {
   };
 
   public type Comment = {
-    id : Nat;
-    postId : Nat;
-    authorName : Text;
-    body : Text;
-    createdAt : Int;
+    id : Nat; postId : Nat; authorName : Text; body : Text; createdAt : Int;
   };
 
   public type UserProfile = {
-    name : Text;
+    name : Text; about : ?Text; profilePicUrl : ?Text;
   };
 
-  // State
+  type UserProfileBase = { name : Text; };
+  type UserProfileExt = { about : ?Text; profilePicUrl : ?Text; };
+
   var nextPostId = 3;
   var nextCommentId = 1;
 
-  // Legacy stable Map (V1 type) — keeps old stored data compatible during upgrade
   let posts : Map.Map<Nat, BlogPostV1> = Map.empty();
-
-  // New stable Map with updated Category type
   let postsV2 : Map.Map<Nat, BlogPost> = Map.empty();
-
   let comments = Map.empty<Nat, List.List<Comment>>();
-  let userProfiles = Map.empty<Principal, UserProfile>();
+  let userProfiles = Map.empty<Principal, UserProfileBase>();
+  let userProfilesExt = Map.empty<Principal, UserProfileExt>();
 
-  // Migrate legacy posts into postsV2 on upgrade
   system func postupgrade() {
     for ((id, post) in posts.entries()) {
       if (postsV2.get(id) == null) {
         let category : Category = switch (post.category) {
-          case (#health) #health;
-          case (#anime) #anime;
-          case (#lifestyle) #lifestyle;
-          case (#travel) #travel;
-          case (#recipes) #recipes;
-          case (#tech) #tech;
+          case (#health) #health; case (#anime) #anime; case (#lifestyle) #lifestyle;
+          case (#travel) #travel; case (#recipes) #recipes; case (#tech) #tech;
           case (#other) #other;
         };
         postsV2.add(id, {
-          id = post.id;
-          title = post.title;
-          body = post.body;
-          category = category;
-          authorId = post.authorId;
-          authorName = post.authorName;
-          createdAt = post.createdAt;
-          coverImageUrl = post.coverImageUrl;
-          likeCount = post.likeCount;
-          likes = post.likes;
+          id = post.id; title = post.title; body = post.body; category = category;
+          authorId = post.authorId; authorName = post.authorName; createdAt = post.createdAt;
+          coverImageUrl = post.coverImageUrl; likeCount = post.likeCount; likes = post.likes;
         });
       };
     };
   };
 
-  // User Profile Service
-  public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only users can access profiles");
+  func buildProfile(base : UserProfileBase, ext : ?UserProfileExt) : UserProfile {
+    {
+      name = base.name;
+      about = switch (ext) { case (?e) e.about; case null null };
+      profilePicUrl = switch (ext) { case (?e) e.profilePicUrl; case null null };
     };
-    userProfiles.get(caller);
+  };
+
+  public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) { return null; };
+    switch (userProfiles.get(caller)) {
+      case (null) null;
+      case (?base) ?buildProfile(base, userProfilesExt.get(caller));
+    };
   };
 
   public query ({ caller }) func getUserProfile(user : Principal) : async ?UserProfile {
-    if (caller != user and not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Can only view your own profile");
+    switch (userProfiles.get(user)) {
+      case (null) null;
+      case (?base) ?buildProfile(base, userProfilesExt.get(user));
     };
-    userProfiles.get(user);
   };
 
   public shared ({ caller }) func saveCallerUserProfile(profile : UserProfile) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
-    userProfiles.add(caller, profile);
+    userProfiles.add(caller, { name = profile.name });
+    userProfilesExt.add(caller, { about = profile.about; profilePicUrl = profile.profilePicUrl });
   };
 
-  // BlogPost Service
-  public shared ({ caller }) func createPost(post : BlogPost) : async {
-    id : Nat;
-    createdAt : Int;
-  } {
+  public shared ({ caller }) func createPost(post : BlogPost) : async { id : Nat; createdAt : Int; } {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users have permission to create posts");
     };
     let id = nextPostId;
     nextPostId += 1;
     let createdAt = Int.abs(Time.now());
-    let newPost = {
-      post with
-      id;
-      authorId = caller;
-      createdAt;
-      likeCount = 0;
-      likes = [];
-    };
+    let newPost = { post with id; authorId = caller; createdAt; likeCount = 0; likes = []; };
     postsV2.add(id, newPost);
     { id; createdAt };
   };
 
   public shared ({ caller }) func updatePost(postId : Nat, post : BlogPost) : async () {
-    if (not (AccessControl.isAdmin(accessControlState, caller))) {
-      Runtime.trap("Unauthorized: Only admins can edit posts");
-    };
     switch (postsV2.get(postId)) {
       case (null) { Runtime.trap("Post not found") };
       case (?existingPost) {
-        let category = if (post.category == #other) {
-          existingPost.category;
-        } else {
-          post.category;
+        let isAdmin = AccessControl.isAdmin(accessControlState, caller);
+        let isAuthor = Principal.equal(existingPost.authorId, caller);
+        if (not isAdmin and not isAuthor) {
+          Runtime.trap("Unauthorized: Only the post author or admin can edit posts");
         };
-        let updatedPost = { post with category };
-        postsV2.add(postId, updatedPost);
+        let category = if (post.category == #other) { existingPost.category } else { post.category };
+        postsV2.add(postId, { post with category });
       };
     };
   };
@@ -205,7 +153,6 @@ actor {
     postsV2.remove(postId);
   };
 
-  // Query
   public query ({ caller }) func getPostById(id : Nat) : async BlogPost {
     switch (postsV2.get(id)) {
       case (null) { Runtime.trap("Post not found") };
@@ -234,21 +181,12 @@ actor {
       case (null) { Runtime.trap("Post not found") };
       case (?post) {
         let alreadyLiked = post.likes.find(func(author) { Principal.equal(author, caller) });
-        if (alreadyLiked != null) {
-          Runtime.trap("You already like this post");
-        };
+        if (alreadyLiked != null) { Runtime.trap("You already like this post") };
         let updatedLikes = List.empty<Principal>();
-        for (like in post.likes.values()) {
-          updatedLikes.add(like);
-        };
+        for (like in post.likes.values()) { updatedLikes.add(like) };
         updatedLikes.add(caller);
         let newLikesArray = updatedLikes.toArray();
-        let updatedPost = {
-          post with
-          likes = newLikesArray;
-          likeCount = BlogPost.computeLikeCount(newLikesArray);
-        };
-        postsV2.add(postId, updatedPost);
+        postsV2.add(postId, { post with likes = newLikesArray; likeCount = BlogPost.computeLikeCount(newLikesArray) });
       };
     };
   };
@@ -259,13 +197,10 @@ actor {
 
   public query ({ caller }) func getUniqueAuthors() : async [Text] {
     let uniqueAuthors = Set.empty<Text>();
-    for (post in postsV2.values()) {
-      uniqueAuthors.add(post.authorName);
-    };
+    for (post in postsV2.values()) { uniqueAuthors.add(post.authorName) };
     uniqueAuthors.toArray();
   };
 
-  // Comment Service
   public shared ({ caller }) func addCommentToPost(comment : Comment) : async Nat {
     if (comment.authorName.isEmpty() or comment.body.isEmpty() or comment.body.size() < 10) {
       Runtime.trap("Name and comment body cannot be empty or less than 10 characters");
@@ -274,13 +209,12 @@ actor {
     nextCommentId += 1;
     let createdAt = Int.abs(Time.now());
     let newComment = { comment with id; createdAt };
-    let postId = comment.postId;
-    let postComments = switch (comments.get(postId)) {
+    let postComments = switch (comments.get(comment.postId)) {
       case (null) { List.empty<Comment>() };
       case (?list) { list };
     };
     postComments.add(newComment);
-    comments.add(postId, postComments);
+    comments.add(comment.postId, postComments);
     id;
   };
 
@@ -291,10 +225,7 @@ actor {
     switch (comments.get(postId)) {
       case (null) { Runtime.trap("Post not found") };
       case (?postComments) {
-        let newPostComments = postComments.filter(
-          func(comment) { comment.id != commentId }
-        );
-        comments.add(postId, newPostComments);
+        comments.add(postId, postComments.filter(func(c) { c.id != commentId }));
       };
     };
   };
@@ -306,11 +237,8 @@ actor {
     };
   };
 
-  // Admin Management
   public type UserInfo = {
-    principal : Principal;
-    role : AccessControl.UserRole;
-    profile : ?UserProfile;
+    principal : Principal; role : AccessControl.UserRole; profile : ?UserProfile;
   };
 
   public query ({ caller }) func getUsers() : async [UserInfo] {
@@ -318,8 +246,9 @@ actor {
       Runtime.trap("Unauthorized: Only admins can list users");
     };
     let users = List.empty<UserInfo>();
-    for ((principal, profile) in userProfiles.entries()) {
+    for ((principal, base) in userProfiles.entries()) {
       let role = AccessControl.getUserRole(accessControlState, principal);
+      let profile = buildProfile(base, userProfilesExt.get(principal));
       users.add({ principal; role; profile = ?profile });
     };
     users.toArray();
@@ -330,58 +259,33 @@ actor {
     AccessControl.assignRole(accessControlState, caller, user, role);
   };
 
-  // Seed sample
   let sampleAuthorId = Principal.fromText("aaaaa-aa");
   let sampleAuthorName = "The Journal Team";
   let now = Int.abs(Time.now());
 
   public type PostBody = {
-    id : Text;
-    title : Text;
-    body : Text;
-    category : Category;
-    authorId : Principal;
-    authorName : Text;
-    createdAt : Int;
-    coverImageUrl : ?Text;
-    likeCount : Nat;
-    likes : [Principal];
+    id : Text; title : Text; body : Text; category : Category;
+    authorId : Principal; authorName : Text; createdAt : Int;
+    coverImageUrl : ?Text; likeCount : Nat; likes : [Principal];
   };
 
   public type CommentBody = {
-    id : Nat;
-    postId : Nat;
-    authorName : Text;
-    body : Text;
-    createdAt : Int;
+    id : Nat; postId : Nat; authorName : Text; body : Text; createdAt : Int;
   };
 
   let sampleComments = List.empty<Comment>();
   let post1 = {
-    id = 1;
-    title = "Top 5 Best Romance Anime";
-    body = "Sample content";
-    category = #anime;
-    authorId = sampleAuthorId;
-    authorName = sampleAuthorName;
-    createdAt = now;
-    coverImageUrl = null;
-    likeCount = 0;
-    likes = [];
+    id = 1; title = "Top 5 Best Romance Anime"; body = "Sample content";
+    category = #anime; authorId = sampleAuthorId; authorName = sampleAuthorName;
+    createdAt = now; coverImageUrl = null; likeCount = 0; likes = [];
   };
   let post2 = {
-    id = 2;
-    title = "Best Places to Visit in Japan";
-    body = "Sample content";
-    category = #travel;
-    authorId = sampleAuthorId;
-    authorName = sampleAuthorName;
-    createdAt = now;
-    coverImageUrl = null;
-    likeCount = 0;
-    likes = [];
+    id = 2; title = "Best Places to Visit in Japan"; body = "Sample content";
+    category = #travel; authorId = sampleAuthorId; authorName = sampleAuthorName;
+    createdAt = now; coverImageUrl = null; likeCount = 0; likes = [];
   };
   let samplePosts = [(post1.id, post1), (post2.id, post2)];
+
   public shared ({ caller }) func seedSample() : async () {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
       Runtime.trap("Unauthorized: Only admin can seed sample");

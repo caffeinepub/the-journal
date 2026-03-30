@@ -42,7 +42,7 @@ export const BlogPost = IDL.Record({
   'likes' : IDL.Vec(IDL.Principal),
   'category' : Category,
 });
-export const UserProfile = IDL.Record({ 'name' : IDL.Text });
+export const UserProfile = IDL.Record({ 'name' : IDL.Text, 'about' : IDL.Opt(IDL.Text), 'profilePicUrl' : IDL.Opt(IDL.Text) });
 export const UserInfo = IDL.Record({
   'principal' : IDL.Principal,
   'role' : UserRole,
@@ -120,7 +120,7 @@ export const idlFactory = ({ IDL }) => {
     'likes' : IDL.Vec(IDL.Principal),
     'category' : Category,
   });
-  const UserProfile = IDL.Record({ 'name' : IDL.Text });
+  const UserProfile = IDL.Record({ 'name' : IDL.Text, 'about' : IDL.Opt(IDL.Text), 'profilePicUrl' : IDL.Opt(IDL.Text) });
   const UserInfo = IDL.Record({
     'principal' : IDL.Principal,
     'role' : UserRole,

@@ -115,6 +115,8 @@ export interface UserInfo {
 }
 export interface UserProfile {
     name: string;
+    about?: Array<string>;
+    profilePicUrl?: Array<string>;
 }
 export enum Category {
     anime = "anime",

@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -11,11 +12,14 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Principal } from "@icp-sdk/core/principal";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Edit, Loader2, PenLine, RefreshCw, Trash2 } from "lucide-react";
 import { motion } from "motion/react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { UserRole } from "../backend";
+import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useAllPosts,
@@ -30,17 +34,39 @@ import {
   CATEGORY_LABELS,
   formatDate,
 } from "../utils/category";
+import { storeSessionParameter } from "../utils/urlParams";
 
 export default function AdminDashboard() {
   const { identity } = useInternetIdentity();
   const { data: isAdmin, isLoading: adminLoading } = useIsAdmin();
   const navigate = useNavigate();
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+  const [adminToken, setAdminToken] = useState("");
+  const [claiming, setClaiming] = useState(false);
 
   const { data: posts = [], isLoading: postsLoading } = useAllPosts();
   const { data: users = [], isLoading: usersLoading } = useAllUsers();
   const deletePost = useDeletePost();
   const seedSample = useSeedSample();
   const setAdminRole = useSetAdminRole();
+
+  const handleClaimAdmin = async () => {
+    if (!actor || !adminToken.trim()) return;
+    setClaiming(true);
+    try {
+      storeSessionParameter("caffeineAdminToken", adminToken.trim());
+      await actor._initializeAccessControlWithSecret(adminToken.trim());
+      await queryClient.invalidateQueries({ queryKey: ["isAdmin"] });
+      await queryClient.refetchQueries({ queryKey: ["isAdmin"] });
+      toast.success("Admin access granted! Refreshing...");
+      setTimeout(() => window.location.reload(), 1000);
+    } catch {
+      toast.error("Invalid token. Please check and try again.");
+    } finally {
+      setClaiming(false);
+    }
+  };
 
   if (!identity) {
     return (
@@ -69,12 +95,47 @@ export default function AdminDashboard() {
   if (!isAdmin) {
     return (
       <div
-        className="max-w-lg mx-auto px-4 py-20 text-center"
+        className="max-w-md mx-auto px-4 py-20 text-center"
         data-ocid="admin.error_state"
       >
-        <h2 className="font-serif text-3xl font-bold mb-4">Not Authorized</h2>
-        <p className="text-muted-foreground">
-          You need admin access to view this page.
+        <h2 className="font-serif text-3xl font-bold mb-3">Admin Access</h2>
+        <p className="text-muted-foreground mb-8">
+          Enter your admin token to claim administrator privileges. You can find
+          this token in the Caffeine deployment link provided when the app was
+          published.
+        </p>
+        <div className="flex flex-col gap-3 text-left">
+          <label htmlFor="admin-token-input" className="text-sm font-medium">
+            Admin Token
+          </label>
+          <Input
+            id="admin-token-input"
+            type="password"
+            placeholder="Paste your admin token here"
+            value={adminToken}
+            onChange={(e) => setAdminToken(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleClaimAdmin()}
+            data-ocid="admin.input"
+          />
+          <Button
+            onClick={handleClaimAdmin}
+            disabled={!adminToken.trim() || claiming}
+            className="w-full"
+            data-ocid="admin.submit_button"
+          >
+            {claiming ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Verifying...
+              </>
+            ) : (
+              "Claim Admin Access"
+            )}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground mt-6">
+          Tip: The token is in the URL that Caffeine shows you after deployment
+          — look for <code>caffeineAdminToken=</code> in the link.
         </p>
       </div>
     );

@@ -201,13 +201,27 @@ export function useDeleteComment() {
   });
 }
 
+// Accept plain strings and convert to Candid-compatible format internally
 export function useSaveProfile() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (profile: UserProfile) => {
-      if (!actor) throw new Error("No actor");
-      return actor.saveCallerUserProfile(profile);
+    mutationFn: async (profile: {
+      name: string;
+      about: string;
+      profilePicUrl: string;
+    }) => {
+      if (!actor) throw new Error("Not signed in");
+      // Explicitly convert to Candid opt format ([] | [string]) so the
+      // actor never receives undefined for optional fields.
+      const candidProfile = {
+        name: profile.name,
+        about: profile.about.trim() ? [profile.about.trim()] : ([] as string[]),
+        profilePicUrl: profile.profilePicUrl
+          ? [profile.profilePicUrl]
+          : ([] as string[]),
+      };
+      return actor.saveCallerUserProfile(candidProfile as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["callerProfile"] });

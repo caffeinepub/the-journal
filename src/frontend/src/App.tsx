@@ -6,6 +6,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
+import AdminInitializer from "./components/AdminInitializer";
 import Footer from "./components/Footer";
 import Header from "./components/Header";
 import ProfileSetupDialog from "./components/ProfileSetupDialog";
@@ -13,6 +14,7 @@ import WelcomePopup from "./components/WelcomePopup";
 import AboutPage from "./pages/AboutPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import EditPostPage from "./pages/EditPostPage";
+import EditProfilePage from "./pages/EditProfilePage";
 import HomePage from "./pages/HomePage";
 import PostDetailPage from "./pages/PostDetailPage";
 import WritePostPage from "./pages/WritePostPage";
@@ -20,6 +22,7 @@ import WritePostPage from "./pages/WritePostPage";
 const rootRoute = createRootRoute({
   component: () => (
     <div className="min-h-screen flex flex-col bg-background">
+      <AdminInitializer />
       <Header />
       <WelcomePopup />
       <ProfileSetupDialog />
@@ -62,6 +65,11 @@ const aboutRoute = createRoute({
   path: "/about",
   component: AboutPage,
 });
+const editProfileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/profile/edit",
+  component: EditProfilePage,
+});
 
 const routeTree = rootRoute.addChildren([
   homeRoute,
@@ -70,6 +78,7 @@ const routeTree = rootRoute.addChildren([
   editRoute,
   adminRoute,
   aboutRoute,
+  editProfileRoute,
 ]);
 
 const router = createRouter({ routeTree });

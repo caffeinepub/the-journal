@@ -42,7 +42,11 @@ export interface UserInfo {
   'role' : UserRole,
   'profile' : [] | [UserProfile],
 }
-export interface UserProfile { 'name' : string }
+export interface UserProfile {
+  'name' : string,
+  'about' : [] | [string],
+  'profilePicUrl' : [] | [string],
+}
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
