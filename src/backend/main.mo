@@ -59,6 +59,32 @@ actor {
     name : Text; about : ?Text; profilePicUrl : ?Text;
   };
 
+  public type ActivityKind = { #like; #comment; #post; };
+
+  public type ActivityItem = {
+    kind : ActivityKind;
+    actorName : Text;
+    postTitle : Text;
+    postId : Nat;
+    timestamp : Int;
+  };
+
+  public type PostStats = {
+    postId : Nat;
+    title : Text;
+    views : Nat;
+    likes : Nat;
+    comments : Nat;
+  };
+
+  public type AnalyticsResult = {
+    posts : [PostStats];
+    totalViews : Nat;
+    totalLikes : Nat;
+    totalComments : Nat;
+    recentActivity : [ActivityItem];
+  };
+
   type UserProfileBase = { name : Text; };
   type UserProfileExt = { about : ?Text; profilePicUrl : ?Text; };
 
@@ -70,6 +96,15 @@ actor {
   let comments = Map.empty<Nat, List.List<Comment>>();
   let userProfiles = Map.empty<Principal, UserProfileBase>();
   let userProfilesExt = Map.empty<Principal, UserProfileExt>();
+
+  // Pen-name based anonymous likes: postId -> Set of pen names
+  let anonLikes = Map.empty<Nat, Set.Set<Text>>();
+
+  // View counts: postId -> count
+  let postViews = Map.empty<Nat, Nat>();
+
+  // Activity feed (append-only; sliced on read)
+  let activityFeed = List.empty<ActivityItem>();
 
   system func postupgrade() {
     for ((id, post) in posts.entries()) {
@@ -94,6 +129,10 @@ actor {
       about = switch (ext) { case (?e) e.about; case null null };
       profilePicUrl = switch (ext) { case (?e) e.profilePicUrl; case null null };
     };
+  };
+
+  func addActivity(item : ActivityItem) {
+    activityFeed.add(item);
   };
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
@@ -128,6 +167,7 @@ actor {
     let createdAt = Int.abs(Time.now());
     let newPost = { post with id; authorId = caller; createdAt; likeCount = 0; likes = []; };
     postsV2.add(id, newPost);
+    addActivity({ kind = #post; actorName = post.authorName; postTitle = post.title; postId = id; timestamp = createdAt });
     { id; createdAt };
   };
 
@@ -171,20 +211,31 @@ actor {
     sortedPosts.sliceToArray(0, Nat.min(limit, sortedPosts.size()));
   };
 
-  public shared ({ caller }) func addLikeToPost(postId : Nat) : async () {
-    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
-      Runtime.trap("Unauthorized: Only logged in users can like a post");
+  // Record a post view (anonymous, no deduplication)
+  public shared ({ caller }) func recordPostView(postId : Nat) : async () {
+    let current = switch (postViews.get(postId)) {
+      case (null) 0;
+      case (?n) n;
     };
+    postViews.add(postId, current + 1);
+  };
+
+  // Like a post with a pen name (no authentication required)
+  public shared ({ caller }) func addLikeToPost(postId : Nat, penName : Text) : async () {
     switch (postsV2.get(postId)) {
       case (null) { Runtime.trap("Post not found") };
       case (?post) {
-        let alreadyLiked = post.likes.find(func(author) { Principal.equal(author, caller) });
-        if (alreadyLiked != null) { Runtime.trap("You already like this post") };
-        let updatedLikes = List.empty<Principal>();
-        for (like in post.likes.values()) { updatedLikes.add(like) };
-        updatedLikes.add(caller);
-        let newLikesArray = updatedLikes.toArray();
-        postsV2.add(postId, { post with likes = newLikesArray; likeCount = BlogPost.computeLikeCount(newLikesArray) });
+        let name = if (penName.size() == 0) { "Anonymous" } else { penName };
+        let likers = switch (anonLikes.get(postId)) {
+          case (null) Set.empty<Text>();
+          case (?s) s;
+        };
+        if (likers.contains(name)) { Runtime.trap("You already liked this post") };
+        likers.add(name);
+        anonLikes.add(postId, likers);
+        let newLikeCount = post.likeCount + 1;
+        postsV2.add(postId, { post with likeCount = newLikeCount });
+        addActivity({ kind = #like; actorName = name; postTitle = post.title; postId; timestamp = Int.abs(Time.now()) });
       };
     };
   };
@@ -213,6 +264,11 @@ actor {
     };
     postComments.add(newComment);
     comments.add(comment.postId, postComments);
+    let postTitle = switch (postsV2.get(comment.postId)) {
+      case (null) "";
+      case (?p) p.title;
+    };
+    addActivity({ kind = #comment; actorName = comment.authorName; postTitle; postId = comment.postId; timestamp = createdAt });
     id;
   };
 
@@ -232,6 +288,37 @@ actor {
     switch (comments.get(postId)) {
       case (null) { [] };
       case (?postComments) { postComments.toArray() };
+    };
+  };
+
+  // Analytics: admin only
+  public query ({ caller }) func getAnalytics() : async AnalyticsResult {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can view analytics");
+    };
+    var totalViews = 0;
+    var totalLikes = 0;
+    var totalComments = 0;
+    let postStatsList = List.empty<PostStats>();
+    for (post in postsV2.values()) {
+      let views = switch (postViews.get(post.id)) { case (null) 0; case (?n) n; };
+      let commentCount = switch (comments.get(post.id)) { case (null) 0; case (?l) l.size(); };
+      let likes = Nat.max(post.likeCount, switch (anonLikes.get(post.id)) { case (null) 0; case (?s) s.size(); });
+      totalViews += views;
+      totalLikes += likes;
+      totalComments += commentCount;
+      postStatsList.add({ postId = post.id; title = post.title; views; likes; comments = commentCount });
+    };
+    // Return only the most recent 50 activity items
+    let allActivity = activityFeed.toArray();
+    let actLen = allActivity.size();
+    let recentActivity = if (actLen > 50) { allActivity.sliceToArray(actLen - 50, actLen) } else { allActivity };
+    {
+      posts = postStatsList.toArray();
+      totalViews;
+      totalLikes;
+      totalComments;
+      recentActivity;
     };
   };
 

@@ -1,6 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -14,7 +16,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Principal } from "@icp-sdk/core/principal";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Edit, Loader2, PenLine, RefreshCw, Trash2 } from "lucide-react";
+import {
+  BarChart3,
+  Edit,
+  Loader2,
+  PenLine,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -24,6 +33,7 @@ import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useAllPosts,
   useAllUsers,
+  useAnalytics,
   useDeletePost,
   useIsAdmin,
   useSeedSample,
@@ -36,6 +46,15 @@ import {
 } from "../utils/category";
 import { storeSessionParameter } from "../utils/urlParams";
 
+function timeAgo(timestamp: bigint): string {
+  const ms = Number(timestamp / BigInt(1_000_000));
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return "just now";
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
 export default function AdminDashboard() {
   const { identity } = useInternetIdentity();
   const { data: isAdmin, isLoading: adminLoading } = useIsAdmin();
@@ -47,6 +66,7 @@ export default function AdminDashboard() {
 
   const { data: posts = [], isLoading: postsLoading } = useAllPosts();
   const { data: users = [], isLoading: usersLoading } = useAllUsers();
+  const { data: analytics, isLoading: analyticsLoading } = useAnalytics();
   const deletePost = useDeletePost();
   const seedSample = useSeedSample();
   const setAdminRole = useSetAdminRole();
@@ -185,6 +205,9 @@ export default function AdminDashboard() {
           </TabsTrigger>
           <TabsTrigger value="users" data-ocid="admin.users.tab">
             Users ({users.length})
+          </TabsTrigger>
+          <TabsTrigger value="analytics" data-ocid="admin.analytics.tab">
+            Analytics
           </TabsTrigger>
           <TabsTrigger value="seed" data-ocid="admin.seed.tab">
             Seed Data
@@ -359,6 +382,185 @@ export default function AdminDashboard() {
                   ))}
                 </TableBody>
               </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="analytics" data-ocid="admin.analytics.panel">
+          {analyticsLoading ? (
+            <div
+              className="flex justify-center py-12"
+              data-ocid="admin.analytics.loading_state"
+            >
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : !analytics ? (
+            <div
+              className="text-center py-12 text-muted-foreground"
+              data-ocid="admin.analytics.empty_state"
+            >
+              No analytics data available yet.
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {/* Summary cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <Card className="border border-border rounded-xl">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Total Views
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="font-serif text-4xl font-bold text-foreground">
+                      {analytics.totalViews.toString()}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="border border-border rounded-xl">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Total Likes
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="font-serif text-4xl font-bold text-foreground">
+                      {analytics.totalLikes.toString()}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card className="border border-border rounded-xl">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Total Comments
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="font-serif text-4xl font-bold text-foreground">
+                      {analytics.totalComments.toString()}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Per-post stats */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="font-serif text-lg font-semibold">
+                    Post Stats
+                  </h3>
+                </div>
+                {analytics.posts.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">
+                    No posts to show yet.
+                  </p>
+                ) : (
+                  <div className="border border-border rounded-xl overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-muted/40">
+                          <TableHead>Title</TableHead>
+                          <TableHead className="text-center">Views</TableHead>
+                          <TableHead className="text-center">Likes</TableHead>
+                          <TableHead className="text-center">
+                            Comments
+                          </TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {analytics.posts.map((stat, i) => (
+                          <TableRow
+                            key={stat.postId.toString()}
+                            data-ocid={`analytics.posts.row.${i + 1}`}
+                          >
+                            <TableCell className="font-medium max-w-xs">
+                              <Link
+                                to="/post/$id"
+                                params={{ id: stat.postId.toString() }}
+                                className="hover:underline line-clamp-1"
+                              >
+                                {stat.title}
+                              </Link>
+                            </TableCell>
+                            <TableCell className="text-center text-sm">
+                              {stat.views.toString()}
+                            </TableCell>
+                            <TableCell className="text-center text-sm">
+                              {stat.likes.toString()}
+                            </TableCell>
+                            <TableCell className="text-center text-sm">
+                              {stat.comments.toString()}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+
+              {/* Recent activity */}
+              <div>
+                <h3 className="font-serif text-lg font-semibold mb-3">
+                  Recent Activity
+                </h3>
+                {analytics.recentActivity.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">
+                    No activity yet.
+                  </p>
+                ) : (
+                  <ScrollArea className="h-96">
+                    <div className="space-y-1 pr-4">
+                      {analytics.recentActivity.map((item, i) => {
+                        let icon = "👁";
+                        let action = "viewed";
+                        if ("like" in item.kind) {
+                          icon = "❤️";
+                          action = "liked";
+                        } else if ("comment" in item.kind) {
+                          icon = "💬";
+                          action = "commented on";
+                        } else if ("post" in item.kind) {
+                          icon = "✍️";
+                          action = "published";
+                        }
+                        return (
+                          <div
+                            key={`${item.postId.toString()}-${item.timestamp.toString()}-${i}`}
+                            className="flex items-start gap-3 py-3 border-b border-border last:border-0"
+                            data-ocid={`analytics.activity.item.${i + 1}`}
+                          >
+                            <span className="text-lg leading-none mt-0.5">
+                              {icon}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm">
+                                <span className="font-semibold">
+                                  {item.actorName}
+                                </span>{" "}
+                                <span className="text-muted-foreground">
+                                  {action}
+                                </span>{" "}
+                                <Link
+                                  to="/post/$id"
+                                  params={{ id: item.postId.toString() }}
+                                  className="font-medium hover:underline line-clamp-1"
+                                >
+                                  {item.postTitle}
+                                </Link>
+                              </p>
+                            </div>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">
+                              {timeAgo(item.timestamp)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
             </div>
           )}
         </TabsContent>

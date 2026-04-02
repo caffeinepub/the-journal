@@ -7,8 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { ArrowLeft, Heart, MessageCircle, Trash2 } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useActor } from "../hooks/useActor";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
   useAddComment,
@@ -19,6 +20,7 @@ import {
   useDeletePost,
   useIsAdmin,
   usePostById,
+  useRecordPostView,
 } from "../hooks/useQueries";
 import {
   CATEGORY_BG_COLORS,
@@ -92,6 +94,7 @@ export default function PostDetailPage() {
   const postId = BigInt(id);
   const navigate = useNavigate();
   const { identity } = useInternetIdentity();
+  const { actor } = useActor();
   const { data: post, isLoading: postLoading } = usePostById(postId);
   const { data: comments = [], isLoading: commentsLoading } =
     useCommentsByPost(postId);
@@ -99,6 +102,7 @@ export default function PostDetailPage() {
   const addComment = useAddComment();
   const deleteComment = useDeleteComment();
   const deletePost = useDeletePost();
+  const recordView = useRecordPostView();
   const { data: isAdmin } = useIsAdmin();
   const { data: callerProfile } = useCallerUserProfile();
 
@@ -106,10 +110,29 @@ export default function PostDetailPage() {
   const [commentBody, setCommentBody] = useState("");
   const [liked, setLiked] = useState(false);
 
+  // Record view when post loads
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only fire once when post id is known
+  useEffect(() => {
+    if (post && actor) {
+      recordView.mutate(postId);
+    }
+  }, [post?.id, actor]);
+
   const handleLike = async () => {
     if (liked) return;
+    // Pen name from localStorage (set via welcome popup) or logged-in profile
+    const penName =
+      localStorage.getItem("journal_pending_penname") ||
+      callerProfile?.name ||
+      "";
+    if (!penName) {
+      toast.info(
+        "Set your pen name first — it appears at the top of the page when you first visit.",
+      );
+      return;
+    }
     try {
-      await addLike.mutateAsync(postId);
+      await addLike.mutateAsync({ postId, penName });
       setLiked(true);
     } catch {
       toast.error("Could not like post");
@@ -351,7 +374,11 @@ export default function PostDetailPage() {
               <Label htmlFor="comment-name">Name</Label>
               <Input
                 id="comment-name"
-                placeholder={callerProfile?.name || "Your name"}
+                placeholder={
+                  callerProfile?.name ||
+                  localStorage.getItem("journal_pending_penname") ||
+                  "Your name"
+                }
                 value={commentName}
                 onChange={(e) => setCommentName(e.target.value)}
                 className="mt-1 bg-white"

@@ -160,14 +160,39 @@ export function useAddLike() {
   const { actor } = useActor();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (postId: bigint) => {
+    mutationFn: async ({
+      postId,
+      penName,
+    }: { postId: bigint; penName: string }) => {
       if (!actor) throw new Error("No actor");
-      return actor.addLikeToPost(postId);
+      return actor.addLikeToPost(postId, penName);
     },
-    onSuccess: (_, postId) => {
+    onSuccess: (_, { postId }) => {
       queryClient.invalidateQueries({ queryKey: ["post", postId.toString()] });
       queryClient.invalidateQueries({ queryKey: ["posts"] });
     },
+  });
+}
+
+export function useRecordPostView() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async (postId: bigint) => {
+      if (!actor) return;
+      return actor.recordPostView(postId);
+    },
+  });
+}
+
+export function useAnalytics() {
+  const { actor, isFetching } = useActor();
+  return useQuery({
+    queryKey: ["analytics"],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getAnalytics();
+    },
+    enabled: !!actor && !isFetching,
   });
 }
 

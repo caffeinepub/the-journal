@@ -136,7 +136,9 @@ export enum UserRole {
 export interface backendInterface {
     _initializeAccessControlWithSecret(userSecret: string): Promise<void>;
     addCommentToPost(comment: Comment): Promise<bigint>;
-    addLikeToPost(postId: bigint): Promise<void>;
+    addLikeToPost(postId: bigint, penName: string): Promise<void>;
+    recordPostView(postId: bigint): Promise<void>;
+    getAnalytics(): Promise<import('./backend.d').AnalyticsResult>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     createPost(post: BlogPost): Promise<{
         id: bigint;
@@ -192,17 +194,43 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async addLikeToPost(arg0: bigint): Promise<void> {
+    async addLikeToPost(arg0: bigint, arg1: string): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.addLikeToPost(arg0);
+                const result = await (this.actor as any).addLikeToPost(arg0, arg1);
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.addLikeToPost(arg0);
+            const result = await (this.actor as any).addLikeToPost(arg0, arg1);
+            return result;
+        }
+    }
+    async recordPostView(arg0: bigint): Promise<void> {
+        if (this.processError) {
+            try {
+                await (this.actor as any).recordPostView(arg0);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            await (this.actor as any).recordPostView(arg0);
+        }
+    }
+    async getAnalytics(): Promise<any> {
+        if (this.processError) {
+            try {
+                const result = await (this.actor as any).getAnalytics();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await (this.actor as any).getAnalytics();
             return result;
         }
     }

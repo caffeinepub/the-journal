@@ -36,6 +36,28 @@ export interface UserProfile {
     about?: Array<string>;
     profilePicUrl?: Array<string>;
 }
+export type ActivityKind = { like: null } | { comment: null } | { post: null };
+export interface ActivityItem {
+    kind: ActivityKind;
+    actorName: string;
+    postTitle: string;
+    postId: bigint;
+    timestamp: bigint;
+}
+export interface PostStats {
+    postId: bigint;
+    title: string;
+    views: bigint;
+    likes: bigint;
+    comments: bigint;
+}
+export interface AnalyticsResult {
+    posts: Array<PostStats>;
+    totalViews: bigint;
+    totalLikes: bigint;
+    totalComments: bigint;
+    recentActivity: Array<ActivityItem>;
+}
 export enum Category {
     anime = "anime",
     recipes = "recipes",
@@ -53,7 +75,7 @@ export enum UserRole {
 }
 export interface backendInterface {
     addCommentToPost(comment: Comment): Promise<bigint>;
-    addLikeToPost(postId: bigint): Promise<void>;
+    addLikeToPost(postId: bigint, penName: string): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     createPost(post: BlogPost): Promise<{
         id: bigint;
@@ -63,6 +85,7 @@ export interface backendInterface {
     deletePost(postId: bigint): Promise<void>;
     getAllCategories(): Promise<Array<Category>>;
     getAllPosts(): Promise<Array<BlogPost>>;
+    getAnalytics(): Promise<AnalyticsResult>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
     getCommentsByPost(postId: bigint): Promise<Array<Comment>>;
@@ -73,6 +96,7 @@ export interface backendInterface {
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getUsers(): Promise<Array<UserInfo>>;
     isCallerAdmin(): Promise<boolean>;
+    recordPostView(postId: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     seedSample(): Promise<void>;
     setAdminRole(user: Principal, isAdmin: boolean): Promise<void>;
